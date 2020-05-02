@@ -35,11 +35,15 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser" % circeVersion
 )
 
-mainClass in Compile := Some("org.parseq.parserservice.Main")
 
 addCompilerPlugin("org.typelevel" % "kind-projector_2.13.1" % "0.11.0")
 
+assemblyJarName in assembly := s"app.jar"
+mainClass in assembly := Some("org.parseq.parserservice.Main")
+
+//mainClass in Compile := Some("org.parseq.parserservice.Main")
+
 //dockerBaseImage := "openjdk:jre-alpine"
-enablePlugins(DockerPlugin)
+//enablePlugins(DockerPlugin)
 //enablePlugins(AshScriptPlugin)
-enablePlugins(JavaAppPackaging)
+//enablePlugins(JavaAppPackaging)
