@@ -2,7 +2,7 @@ name := "parser-service"
 
 version := "0.2"
 
-scalaVersion := "2.13.1"
+scalaVersion := "2.13.2"
 
 val natchezVersion = "0.0.10"
 val http4sVersion = "0.21.0-M6"
