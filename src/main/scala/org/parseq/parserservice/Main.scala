@@ -21,13 +21,17 @@ import org.http4s.server.middleware.Metrics
 import org.http4s.server.{Router, Server}
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
+import org.http4s.client.dsl.Http4sClientDsl
+import org.parseq.parserservice.expression.Expr
 
 import scala.concurrent.ExecutionContext.global
 import scala.language.higherKinds
 
 object Main extends IOApp {
 
-  def spannedClient[F[_]](span: Span[F], client: Client[F])(implicit F: Sync[F]): Client[F] = {
+  def spannedClient[F[_] : Sync : Span : Client]: Client[F] = {
+    val span = implicitly[Span[F]]
+    val client =implicitly[Client[F]]
     Client[F](request =>
       for {
         s <- span.span(s"http4s-request")
@@ -43,11 +47,11 @@ object Main extends IOApp {
 
   def httpGet[F[_] : ConcurrentEffect, A, B](url: String)(f: A => F[B])(implicit c: Client[F], s: Span[F], d: EntityDecoder[F, A]): F[B] = {
     import cats.syntax.flatMap._
-    spannedClient(s, c).expect[A](url).flatMap(f)
+    spannedClient.expect[A](url).flatMap(f)
   }
 
   def httpGetString[F[_] : ConcurrentEffect, A](url: String)(implicit c: Client[F], s: Span[F], d: EntityDecoder[F, A]): F[String] = {
-    spannedClient(s, c).expect[String](url)
+    spannedClient.expect[String](url)
   }
 
   val baseUrl = "http://math-service:8082/api"
@@ -58,6 +62,16 @@ object Main extends IOApp {
   def sum[F[_] : ConcurrentEffect : Span : Client](x: Int, y: Int)(implicit e: EntityDecoder[F, String]): F[String] =
     httpGetString(s"$baseUrl/sum/$x/$y")
 
+  def calculate[F[_] : ConcurrentEffect : Span : Client](expr: Expr)(implicit e: EntityDecoder[F, String]): F[String] = {
+    object dsl extends Http4sClientDsl[F]
+    import dsl._
+    import org.http4s.Method._
+    import io.circe.generic.auto._
+    import io.circe.syntax._
+    import org.http4s.circe.CirceEntityCodec._
+    spannedClient.expect(POST(expr.asJson, uri"http://math-service:8082/api/calculate"))(implicitly[EntityDecoder[F, String]])
+  }
+
   def api[F[_] : ConcurrentEffect : Parallel](ep: EntryPoint[F], client: Client[F]): Kleisli[OptionT[F, *], Request[F], Response[F]] = {
     object dsl extends Http4sDsl[F]
     import dsl._
@@ -66,18 +80,19 @@ object Main extends IOApp {
     HttpRoutes.of[F] {
 
       case GET -> Root / "health" => Ok("Ok")
-      case GET -> Root / "health2" => Ok("Ok2")
 
       case req@GET -> Root / "parse" =>
-        import io.circe.generic.auto._
-        import org.http4s.circe.CirceEntityCodec._
-        import cats.syntax.flatMap._
-        import expression._
-
-        for {
-          expr <- req.as[Expr]
-          resp <- Ok(expr)
-        } yield resp
+        ep.root(s"parse").use { implicit span =>
+          import io.circe.generic.auto._
+          import org.http4s.circe.CirceEntityCodec._
+          import cats.syntax.flatMap._
+          import expression._
+          for {
+            expr <- req.as[Expr]
+            result <- calculate(expr)
+            resp <- Ok(result)
+          } yield resp
+        }
 
       case GET -> Root / "seq" / IntVar(x) / IntVar(y) => ep.root(s"seq($x/$y)").use { implicit span =>
         import cats.syntax.apply._
