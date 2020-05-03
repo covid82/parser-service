@@ -50,7 +50,7 @@ object Main extends IOApp {
     spannedClient(s, c).expect[String](url)
   }
 
-  val baseUrl = "http://math-service:9090/api"
+  val baseUrl = "http://math-service:8082/api"
 
   def rand[F[_] : ConcurrentEffect : Span : Client](x: Int)(implicit e: EntityDecoder[F, String]): F[String] =
     httpGetString(s"$baseUrl/random/$x")
